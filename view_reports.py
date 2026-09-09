@@ -55,14 +55,10 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
-    root = args.reports_dir.expanduser()
-    if not root.is_dir():
-        raise SystemExit(
-            f"No reports directory at {root.resolve()}. "
-            "Run `python analyze.py NVDA` first, or pass --reports-dir."
-        )
+    # A missing directory is not fatal: the page shows an empty state, and the
+    # banner names the path it is watching, so a typo is obvious at a glance.
     serve(
-        root,
+        args.reports_dir.expanduser(),
         host=args.host,
         port=args.port,
         open_browser=not args.no_browser,

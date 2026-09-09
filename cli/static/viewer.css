@@ -2,6 +2,7 @@
    Ink (dark) is the default; Paper is the reading/printing alternate. */
 
 :root {
+  --bar-h: 68px;
   --serif: "Newsreader", "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
   --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 
@@ -77,15 +78,12 @@ a { color: inherit; }
 /* ── Chrome ──────────────────────────────────────────────────────────── */
 
 .masthead {
-  position: sticky;
-  top: 0;
-  z-index: 40;
   display: flex;
   align-items: flex-end;
   justify-content: space-between;
   gap: 20px;
   padding: 18px 32px 12px;
-  background: linear-gradient(to bottom, var(--bg) 62%, transparent);
+  background: var(--bg);
   border-bottom: 1px solid var(--line);
 }
 
@@ -121,12 +119,7 @@ a { color: inherit; }
   font-family: var(--mono);
   font-size: 10.5px;
   color: var(--fg-3);
-  max-width: 34ch;
-  overflow: hidden;
-  text-overflow: ellipsis;
   white-space: nowrap;
-  direction: rtl;
-  text-align: left;
 }
 
 .btn {
@@ -178,7 +171,7 @@ a { color: inherit; }
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.02em;
 }
-.stat-val small { font-size: 13px; color: var(--fg-2); }
+.stat-val small { font-size: 13px; color: var(--fg-2); margin-left: 3px; }
 .stat-sub { font-family: var(--mono); font-size: 10.5px; color: var(--fg-3); margin-top: 2px; }
 
 .split { grid-column: span 2; display: flex; flex-direction: column; justify-content: center; }
@@ -300,7 +293,7 @@ a { color: inherit; }
 .run[data-dir="flat"] { --call: var(--flat); }
 .run[data-dir="none"] { --call: var(--line); }
 
-.run-id { grid-column: 1; grid-row: 1; }
+.run-id { grid-column: 1; grid-row: 1 / span 2; }
 .tick {
   display: block;
   font-size: 22px;
@@ -319,13 +312,12 @@ a.tick:hover, a.tick:focus-visible { color: var(--accent); outline: 0; }
   margin-top: 3px;
 }
 .run-meta {
-  grid-column: 1;
-  grid-row: 2;
+  display: block;
+  margin-top: 7px;
   font-family: var(--mono);
   font-size: 10px;
   letter-spacing: 0.06em;
   color: var(--fg-3);
-  align-self: end;
 }
 
 .run-call { grid-column: 2; grid-row: 1 / span 2; }
@@ -362,6 +354,7 @@ a.tick:hover, a.tick:focus-visible { color: var(--accent); outline: 0; }
   margin: 2px 0 0;
   font-family: var(--mono);
   font-size: 14px;
+  line-height: 1.3;
   font-variant-numeric: tabular-nums;
   color: var(--fg);
   white-space: nowrap;
@@ -374,7 +367,7 @@ a.tick:hover, a.tick:focus-visible { color: var(--accent); outline: 0; }
 }
 .levels dd em.up { color: var(--bull); }
 .levels dd em.down { color: var(--bear); }
-.levels dd.thin { font-family: var(--serif); font-size: 14px; white-space: normal; }
+.levels dd.thin { font-family: var(--serif); font-size: 14.5px; line-height: 1.25; white-space: normal; }
 
 .run-gist {
   grid-column: 3;
@@ -524,7 +517,7 @@ a.tick:hover, a.tick:focus-visible { color: var(--accent); outline: 0; }
   pointer-events: none;
 }
 
-.progress { position: sticky; top: 0; z-index: 29; height: 2px; background: transparent; }
+.progress { position: sticky; top: var(--bar-h); z-index: 29; height: 2px; background: transparent; }
 .progress i { display: block; height: 100%; width: 0; background: var(--accent); transition: width 0.1s linear; }
 
 .reader-body {
@@ -536,8 +529,8 @@ a.tick:hover, a.tick:focus-visible { color: var(--accent); outline: 0; }
 
 .rail {
   position: sticky;
-  top: 64px;
-  max-height: calc(100vh - 64px);
+  top: calc(var(--bar-h) + 14px);
+  max-height: calc(100vh - var(--bar-h) - 14px);
   overflow-y: auto;
   padding: 26px 18px 60px 32px;
   border-right: 1px solid var(--line-soft);
@@ -572,8 +565,8 @@ a.tick:hover, a.tick:focus-visible { color: var(--accent); outline: 0; }
 .prose { padding: 40px 52px 140px; min-width: 0; }
 .outline {
   position: sticky;
-  top: 64px;
-  max-height: calc(100vh - 64px);
+  top: calc(var(--bar-h) + 14px);
+  max-height: calc(100vh - var(--bar-h) - 14px);
   overflow-y: auto;
   padding: 26px 32px 60px 0;
 }
@@ -600,7 +593,7 @@ a.tick:hover, a.tick:focus-visible { color: var(--accent); outline: 0; }
 .outline a.active { color: var(--accent); border-left-color: var(--accent); }
 
 /* Section slabs */
-.sec { max-width: 74ch; margin: 0 auto 84px; scroll-margin-top: 72px; }
+.sec { max-width: 74ch; margin: 0 auto 84px; scroll-margin-top: calc(var(--bar-h) + 26px); }
 .sec-head { border-top: 2px solid var(--fg); padding-top: 12px; margin-bottom: 32px; }
 .sec-kicker {
   font-family: var(--mono);
@@ -619,7 +612,7 @@ a.tick:hover, a.tick:focus-visible { color: var(--accent); outline: 0; }
   font-weight: 500;
   letter-spacing: -0.015em;
   line-height: 1.2;
-  scroll-margin-top: 76px;
+  scroll-margin-top: calc(var(--bar-h) + 26px);
 }
 .md h1 { font-size: 25px; margin: 44px 0 14px; }
 .md h2 {
@@ -746,7 +739,11 @@ mark.on { background: var(--accent); color: var(--accent-ink); }
     padding: 18px;
   }
   .prose { padding: 26px 18px 90px; }
-  .reader-bar { padding: 12px 18px; gap: 12px; }
+  /* The bar wraps to three rows on a phone — 150px of sticky chrome is more
+     than a small viewport can spare, so let it scroll away instead. */
+  .reader-bar { position: static; padding: 12px 18px; gap: 12px; }
+  .progress { display: none; }
+  .sec, .md h1, .md h2, .md h3, .md h4 { scroll-margin-top: 16px; }
   .levels-bar { order: 5; flex-basis: 100%; }
   .reader-tools { order: 4; }
 }

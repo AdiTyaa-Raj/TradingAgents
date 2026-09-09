@@ -207,13 +207,17 @@ def serve(root: Path | str, host: str = "127.0.0.1", port: int = 8765,
 
     runs = list_runs(root)
     newest = runs[0] if runs else None
+    if newest:
+        found = f"  Runs found    : {len(runs)}  (newest: {newest.ticker} {newest.run_date or ''})"
+    elif root.is_dir():
+        found = "  Runs found    : 0 — run `python analyze.py NVDA` first"
+    else:
+        found = "  Runs found    : 0 — that directory does not exist yet"
     banner = [
         "",
         f"  Report viewer : {url}",
         f"  Reports root  : {root.resolve()}",
-        f"  Runs found    : {len(runs)}  (newest: {newest.ticker} {newest.run_date or ''})"
-        if newest
-        else "  Runs found    : 0 — run `python analyze.py NVDA` first",
+        found,
         "",
         "  Ctrl-C to stop.",
         "",

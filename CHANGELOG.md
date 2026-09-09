@@ -38,6 +38,19 @@ Breaking changes within the 0.x line are called out explicitly.
 
 ### Added
 
+- **Local report viewer** (`python view_reports.py`, or `tradingagents
+  reports`): the saved report tree served as a browsable page instead of
+  terminal scrollback, which cannot hold a 25,000-word run. A tape of every run
+  shows its call, rating, entry/stop/target with each level's distance from
+  entry, horizon and the portfolio manager's summary, with filtering, sorting,
+  in-place expansion and a printable one-page digest; opening a run gives the
+  full report with section navigation, per-section outline, find-in-report and
+  markdown export. Read-only, bound to localhost, standard library plus
+  `markdown-it-py` (already required by rich), so it works offline.
+- **`tradingagents.report_index`**: the read side of the report tree that the
+  viewer sits on — run discovery under a reports root, and extraction of the
+  `**Label**: value` fields the Trader and Portfolio Manager emit into a concise
+  per-run digest. Usable on its own from a script or notebook.
 - **`fmp` vendor** (`dataflows/fmp*.py`): OHLCV, technical indicators,
   fundamentals overview, the three financial statements, ticker and global news,
   and insider transactions, with FMP-specific symbol normalization

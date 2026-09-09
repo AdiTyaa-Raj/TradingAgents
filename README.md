@@ -219,6 +219,30 @@ python -m cli.main     # alternative: run directly from source
 ```
 You will see a screen where you can select your desired tickers, analysis date, LLM provider, research depth, and more.
 
+### Report viewer
+
+Reports are long — a single run is often 25,000 words — and the terminal can
+only show the tail of one. Open them in a browser instead:
+
+```bash
+python view_reports.py       # serves ./reports at http://127.0.0.1:8765
+tradingagents reports        # same viewer, as a CLI subcommand
+```
+
+The page has two halves. The **tape** lists every saved run with its call,
+rating, entry/stop/target (each level shown with its distance from entry),
+horizon and the portfolio manager's summary — filterable by ticker or call,
+sortable, and expandable in place; **One-page digest** puts every run's decision
+on a single printable sheet. Clicking a run opens the **reader**: the full
+report, every section, with section navigation, an outline of the open section,
+find-in-report (`/`), and markdown copy/download. `j`/`k` move between sections,
+`t` switches between the dark and paper themes, `Esc` goes back.
+
+It is read-only and bound to localhost — it renders the markdown already on
+disk, so nothing is re-run and nothing leaves the machine. Point it elsewhere
+with `--reports-dir` (a path saved by `analyze.py --save-path` works directly),
+and `--port` / `--no-browser` are there when you need them.
+
 ### Markets and tickers
 
 TradingAgents works with any market the configured vendor covers, using the exchange-suffixed ticker. Company identity and the alpha benchmark resolve automatically per market.

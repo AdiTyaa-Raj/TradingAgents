@@ -415,7 +415,7 @@ def load_run(root: Path | str, run_id: str) -> RunDetail:
     run_dir = resolve_run_dir(root, run_id)
     sections: list[tuple[SectionMeta, str]] = []
     texts: dict[str, str] = {}
-    for spec, path, _title in iter_section_files(run_dir):
+    for _spec, path, _title in iter_section_files(run_dir):
         texts[path.name] = _read(path)
     summary = summarize_run(run_dir, texts)
     for meta in summary.sections:

@@ -95,7 +95,7 @@ async function loadRuns({ quiet = false } = {}) {
   state.root = data.root;
   state.runs = data.runs;
   state.lastFetch = Date.now();
-  $("#root-path").textContent = data.root;
+  $("#root-path").textContent = data.root.length > 44 ? `…${data.root.slice(-43)}` : data.root;
   $("#root-path").title = data.root;
   renderStrip();
   renderChips();
@@ -185,8 +185,8 @@ function renderTape() {
       <div class="run-id">
         <a class="tick" href="#/run/${encodeURIComponent(run.run_id)}">${esc(run.ticker)}</a>
         <span class="stamp">${esc(stampOf(run))}</span>
+        <span class="run-meta">${run.sections.length} sections · ${words(run.words)} w · ${run.minutes} min</span>
       </div>
-      <div class="run-meta">${run.sections.length} sections · ${words(run.words)} words · ${run.minutes} min</div>
       <div class="run-call">
         ${badge(run)}
         ${run.rating && run.rating !== run.action ? `<span class="rating">${esc(run.rating)}</span>` : ""}
@@ -295,6 +295,7 @@ async function openReader(runId) {
   });
 
   renderRail();
+  measureBar();
   $("#find").value = "";
   state.matches = [];
   state.matchAt = -1;
@@ -323,6 +324,11 @@ function renderOutline(sectionId) {
     section.toc.map((item) => `<a class="lvl${item.level}" href="#${item.id}">${esc(item.title)}</a>`).join("");
 }
 
+function measureBar() {
+  const height = $(".reader-bar").offsetHeight;
+  if (height) document.documentElement.style.setProperty("--bar-h", `${height}px`);
+}
+
 /* One rAF-throttled scroll pass drives the progress bar, the rail highlight,
    and the outline highlight. */
 let scrollQueued = false;
@@ -339,10 +345,11 @@ function syncScroll() {
   const scrollable = document.documentElement.scrollHeight - window.innerHeight;
   $("#progress-bar").style.width = `${scrollable > 0 ? Math.min(100, (window.scrollY / scrollable) * 100) : 0}%`;
 
+  const line = $(".reader-bar").offsetHeight + 46;
   const sections = $$(".sec", $("#prose"));
   let current = sections[0];
   for (const section of sections) {
-    if (section.getBoundingClientRect().top <= 130) current = section;
+    if (section.getBoundingClientRect().top <= line) current = section;
   }
   if (!current) return;
   if (current.dataset.id !== activeSection) {
@@ -353,7 +360,7 @@ function syncScroll() {
   const headings = $$("h2[id], h3[id]", current);
   let heading = null;
   for (const item of headings) {
-    if (item.getBoundingClientRect().top <= 140) heading = item;
+    if (item.getBoundingClientRect().top <= line + 10) heading = item;
   }
   $$("#outline a").forEach((link) => link.classList.toggle("active", heading && link.hash === `#${heading.id}`));
 }
@@ -416,9 +423,11 @@ function updateFindCount() {
   const count = state.matches.length;
   $("#find-count").textContent = !query || query.length < 2
     ? ""
-    : count
-      ? `${state.matchAt + 1 || 1}/${count}`
-      : "none";
+    : !count
+      ? "none"
+      : state.matchAt >= 0
+        ? `${state.matchAt + 1}/${count}`
+        : `${count}`;
 }
 
 function jumpMatch(step) {
@@ -513,7 +522,12 @@ function init() {
     const row = event.target.closest(".run");
     if (row) location.hash = `#/run/${encodeURIComponent(row.dataset.run)}`;
   });
-  $("#find").addEventListener("input", (event) => applyFind(event.target.value));
+  let findTimer;
+  $("#find").addEventListener("input", (event) => {
+    const query = event.target.value;
+    clearTimeout(findTimer);
+    findTimer = setTimeout(() => applyFind(query), 120);
+  });
   $("#find").addEventListener("keydown", (event) => {
     if (event.key === "Enter") {
       event.preventDefault();
@@ -524,6 +538,7 @@ function init() {
 
   window.addEventListener("hashchange", route);
   window.addEventListener("scroll", onScroll, { passive: true });
+  window.addEventListener("resize", () => { measureBar(); onScroll(); });
   document.addEventListener("keydown", onKey);
   // A run that finishes while this tab sits in the background shows up when the
   // user comes back to it.
