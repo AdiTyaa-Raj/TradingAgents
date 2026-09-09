@@ -8,7 +8,6 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-import yfinance as yf
 from langgraph.prebuilt import ToolNode
 
 # Import the abstract tool methods from agent_utils
@@ -30,6 +29,10 @@ from tradingagents.agents.utils.agent_utils import (
 )
 from tradingagents.agents.utils.memory import TradingMemoryLog
 from tradingagents.dataflows.config import set_config
+from tradingagents.dataflows.stockstats_utils import (
+    fetch_ohlcv_window,
+    resolve_ohlcv_vendor,
+)
 from tradingagents.dataflows.utils import safe_ticker_component
 from tradingagents.default_config import DEFAULT_CONFIG
 from tradingagents.llm_clients import create_llm_client
@@ -285,18 +288,22 @@ class TradingAgentsGraph:
         the full holding window has not traded (#1169), or the symbol is delisted
         or unreachable.
         """
-        from tradingagents.dataflows.symbol_utils import normalize_symbol
+        from tradingagents.dataflows.interface import get_vendor
 
         try:
             start = datetime.strptime(trade_date, "%Y-%m-%d")
             end = start + timedelta(days=holding_days + 7)  # buffer for weekends/holidays
             end_str = end.strftime("%Y-%m-%d")
 
-            # Normalize so the realized-return lookup hits the same instrument
-            # the analysis priced (e.g. XAUUSD -> GC=F) (#984). The benchmark is
-            # already a canonical Yahoo symbol from ``_resolve_benchmark``.
-            stock = yf.Ticker(normalize_symbol(ticker)).history(start=trade_date, end=end_str)
-            bench = yf.Ticker(benchmark).history(start=trade_date, end=end_str)
+            # Price from the vendor configured for OHLCV, so a realized return is
+            # measured on the same series the decision was made from. Each
+            # vendor's fetch normalizes the symbol to its own convention
+            # (XAUUSD -> GC=F for Yahoo, GCUSD for FMP), so the lookup hits the
+            # same instrument the analysis priced (#984); ``benchmark`` arrives
+            # as a canonical index symbol from ``_resolve_benchmark``.
+            vendor = resolve_ohlcv_vendor(get_vendor("core_stock_apis", "get_stock_data"))
+            stock = fetch_ohlcv_window(ticker, trade_date, end_str, vendor)
+            bench = fetch_ohlcv_window(benchmark, trade_date, end_str, vendor)
 
             # Require the full holding window in both series. A rerun before it
             # has traded leaves the entry pending to retry next run, rather than
@@ -315,7 +322,7 @@ class TradingAgentsGraph:
             alpha = raw - bench_ret
             # The date of the last price bar used is when this outcome became
             # known — the point-in-time cutoff for injecting the lesson (#1251).
-            resolution_date = stock.index[holding_days].strftime("%Y-%m-%d")
+            resolution_date = stock["Date"].iloc[holding_days].strftime("%Y-%m-%d")
             return raw, alpha, holding_days, resolution_date
         except Exception as e:
             logger.warning(

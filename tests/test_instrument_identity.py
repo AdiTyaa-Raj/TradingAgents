@@ -13,12 +13,20 @@ from tradingagents.agents.utils.agent_utils import (
     get_instrument_context_from_state,
     resolve_instrument_identity,
 )
+from tradingagents.dataflows.config import set_config
 
 
 @pytest.mark.unit
 class ResolveInstrumentIdentityTests(unittest.TestCase):
+    """Identity resolves through the configured fundamental_data vendor chain.
+
+    Each test pins a single vendor so it exercises that vendor's resolver
+    without the chain silently falling through to another one.
+    """
+
     def setUp(self):
         resolve_instrument_identity.cache_clear()
+        set_config({"data_vendors": {"fundamental_data": "yfinance"}})
 
     def test_resolves_company_metadata_from_yfinance(self):
         with patch("tradingagents.agents.utils.agent_utils.yf.Ticker") as mock:
@@ -55,6 +63,66 @@ class ResolveInstrumentIdentityTests(unittest.TestCase):
             side_effect=RuntimeError("rate limited"),
         ):
             self.assertEqual(resolve_instrument_identity("TOTDY"), {})
+
+    def test_resolves_company_metadata_from_fmp(self):
+        set_config({"data_vendors": {"fundamental_data": "fmp"}})
+        with patch("tradingagents.dataflows.fmp_stock.get_profile") as mock:
+            mock.return_value = {
+                "companyName": "Apple Inc.",
+                "sector": "Technology",
+                "industry": "Consumer Electronics",
+                "exchange": "NASDAQ",
+            }
+            identity = resolve_instrument_identity("AAPL")
+        mock.assert_called_once_with("AAPL")
+        self.assertEqual(identity["company_name"], "Apple Inc.")
+        self.assertEqual(identity["sector"], "Technology")
+        self.assertEqual(identity["industry"], "Consumer Electronics")
+        self.assertEqual(identity["exchange"], "NASDAQ")
+
+    def test_falls_through_to_next_vendor_when_primary_fails(self):
+        # A broken primary must not cost the run its identity anchor (#814).
+        set_config({"data_vendors": {"fundamental_data": "fmp,yfinance"}})
+        with patch(
+            "tradingagents.dataflows.fmp_stock.get_profile",
+            side_effect=RuntimeError("rate limited"),
+        ), patch("tradingagents.agents.utils.agent_utils.yf.Ticker") as yf_mock:
+            yf_mock.return_value.info = {"longName": "Apple Inc."}
+            identity = resolve_instrument_identity("AAPL")
+        self.assertEqual(identity["company_name"], "Apple Inc.")
+
+    def test_empty_primary_result_falls_through(self):
+        # An unknown symbol at one vendor may still be known at the next.
+        set_config({"data_vendors": {"fundamental_data": "fmp,yfinance"}})
+        with patch(
+            "tradingagents.dataflows.fmp_stock.get_profile", return_value={}
+        ), patch(
+            "tradingagents.dataflows.fmp_stock.get_quote", return_value={}
+        ), patch("tradingagents.agents.utils.agent_utils.yf.Ticker") as yf_mock:
+            yf_mock.return_value.info = {"shortName": "TOTO"}
+            identity = resolve_instrument_identity("TOTDY")
+        self.assertEqual(identity["company_name"], "TOTO")
+
+    def test_non_equity_identity_falls_back_to_the_quote(self):
+        # profile covers listed companies only; a commodity/crypto/index must
+        # still get a name so the run keeps its identity anchor (#814).
+        set_config({"data_vendors": {"fundamental_data": "fmp"}})
+        with patch(
+            "tradingagents.dataflows.fmp_stock.get_profile", return_value={}
+        ), patch("tradingagents.dataflows.fmp_stock.get_quote") as quote:
+            quote.return_value = {"name": "Gold Futures", "exchange": "COMMODITY"}
+            identity = resolve_instrument_identity("XAUUSD")
+        self.assertEqual(identity["company_name"], "Gold Futures")
+        self.assertEqual(identity["exchange"], "COMMODITY")
+
+    def test_vendor_without_a_resolver_is_skipped(self):
+        # alpha_vantage has no identity endpoint wired up; it must be skipped
+        # rather than treated as an exhausted chain.
+        set_config({"data_vendors": {"fundamental_data": "alpha_vantage,yfinance"}})
+        with patch("tradingagents.agents.utils.agent_utils.yf.Ticker") as yf_mock:
+            yf_mock.return_value.info = {"longName": "TOTO LTD."}
+            identity = resolve_instrument_identity("TOTDY")
+        self.assertEqual(identity["company_name"], "TOTO LTD.")
 
     def test_result_is_cached(self):
         with patch("tradingagents.agents.utils.agent_utils.yf.Ticker") as mock:

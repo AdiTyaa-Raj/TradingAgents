@@ -15,7 +15,8 @@ from collections.abc import Iterable
 import pandas as pd
 from stockstats import wrap
 
-from tradingagents.dataflows.stockstats_utils import load_ohlcv
+from tradingagents.dataflows.interface import get_vendor
+from tradingagents.dataflows.stockstats_utils import load_ohlcv, resolve_ohlcv_vendor
 
 # A fixed, common indicator set so the snapshot is the same shape every run.
 DEFAULT_SNAPSHOT_INDICATORS: tuple[str, ...] = (
@@ -31,8 +32,15 @@ def _verified_rows(symbol: str, curr_date: str) -> pd.DataFrame:
     ``load_ohlcv`` already normalizes the Date column and filters out
     look-ahead rows, but we re-apply the cutoff defensively — this is a
     verification path, so it must not trust its input to be pre-filtered.
+
+    Prices come from the same vendor the technical indicators are configured to
+    use. That agreement is the whole point of the snapshot: the analyst is told
+    to treat it as ground truth over other tool output (#830), so it must not be
+    computed from a different vendor's (differently adjusted) bars than the
+    indicator report it is being compared against.
     """
-    data = load_ohlcv(symbol, curr_date)
+    vendor = resolve_ohlcv_vendor(get_vendor("technical_indicators", "get_indicators"))
+    data = load_ohlcv(symbol, curr_date, vendor)
     if data is None or data.empty:
         raise ValueError(f"No OHLCV data available for {symbol}.")
 

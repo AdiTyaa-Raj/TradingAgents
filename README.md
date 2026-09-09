@@ -157,7 +157,14 @@ Notes specific to this provider:
 
 ### Required APIs
 
-Every other provider talks to an HTTP endpoint. Set the API key for the one you choose:
+Market data comes from [Financial Modeling Prep](https://site.financialmodelingprep.com/developer/docs)
+by default, so set its key:
+
+```bash
+export FMP_API_KEY=...             # Financial Modeling Prep (market data)
+```
+
+Every other provider talks to an HTTP endpoint. Set the API key for the LLM you choose:
 
 ```bash
 export OPENAI_API_KEY=...          # OpenAI (GPT)
@@ -172,8 +179,23 @@ export ZHIPU_CN_API_KEY=...        # GLM via BigModel (China, open.bigmodel.cn)
 export MINIMAX_API_KEY=...         # MiniMax — Global (api.minimax.io)
 export MINIMAX_CN_API_KEY=...      # MiniMax — China (api.minimaxi.com)
 export OPENROUTER_API_KEY=...      # OpenRouter
-export ALPHA_VANTAGE_API_KEY=...   # Alpha Vantage
+export ALPHA_VANTAGE_API_KEY=...   # Alpha Vantage (alternative market-data vendor)
 ```
+
+To run without an FMP key, switch the market-data categories to the keyless
+Yahoo Finance vendor:
+
+```python
+config["data_vendors"] = {
+    "core_stock_apis": "yfinance",
+    "technical_indicators": "yfinance",
+    "fundamental_data": "yfinance",
+    "news_data": "yfinance",
+}
+```
+
+Each category takes an ordered fallback chain, so `"fmp,yfinance"` uses FMP and
+falls back to Yahoo when FMP has no data for a symbol.
 
 For Azure OpenAI, copy `.env.enterprise.example` to `.env.enterprise` and fill in your credentials.
 
@@ -199,13 +221,18 @@ You will see a screen where you can select your desired tickers, analysis date, 
 
 ### Markets and tickers
 
-TradingAgents works with any market Yahoo Finance covers, using the exchange-suffixed ticker. Company identity and the alpha benchmark resolve automatically per market.
+TradingAgents works with any market the configured vendor covers, using the exchange-suffixed ticker. Company identity and the alpha benchmark resolve automatically per market.
 
 - US: `AAPL`, `SPY`
 - Hong Kong: `0700.HK` · Tokyo: `7203.T` · London: `AZN.L`
 - India: `RELIANCE.NS`, `.BO` · Canada: `.TO` · Australia: `.AX`
 - China A-shares: Shanghai `.SS`, Shenzhen `.SZ` (e.g. `600519.SS` for Kweichow Moutai)
 - Crypto: `BTC-USD`, `ETH-USD`
+- Forex: `EURUSD`, `GBPJPY` · Commodities: `XAUUSD` (gold), `USOIL` · Indices: `^GSPC`, `US500`
+
+Write tickers in the Yahoo notation shown above regardless of vendor. Each
+vendor resolves them to its own convention internally — gold is `GC=F` on Yahoo
+and `GCUSD` on FMP — so the same ticker works after a vendor switch.
 
 <p align="center">
   <img src="assets/cli/cli_init.png" width="100%" style="display: inline-block; margin: 0 2%;">

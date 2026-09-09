@@ -17,6 +17,17 @@ from .errors import (
     VendorNotConfiguredError,
     VendorRateLimitError,
 )
+from .fmp import (
+    get_balance_sheet as get_fmp_balance_sheet,
+    get_cashflow as get_fmp_cashflow,
+    get_fundamentals as get_fmp_fundamentals,
+    get_global_news as get_fmp_global_news,
+    get_income_statement as get_fmp_income_statement,
+    get_indicator as get_fmp_indicator,
+    get_insider_transactions as get_fmp_insider_transactions,
+    get_news as get_fmp_news,
+    get_stock as get_fmp_stock,
+)
 from .fred import get_macro_data as get_fred_macro_data
 from .polymarket import get_prediction_markets as get_polymarket_prediction_markets
 from .y_finance import (
@@ -78,6 +89,7 @@ TOOLS_CATEGORIES = {
 }
 
 VENDOR_LIST = [
+    "fmp",
     "yfinance",
     "fred",
     "polymarket",
@@ -95,41 +107,50 @@ OPTIONAL_CATEGORIES = {"macro_data", "prediction_markets"}
 VENDOR_METHODS = {
     # core_stock_apis
     "get_stock_data": {
+        "fmp": get_fmp_stock,
         "alpha_vantage": get_alpha_vantage_stock,
         "yfinance": get_YFin_data_online,
     },
     # technical_indicators
     "get_indicators": {
+        "fmp": get_fmp_indicator,
         "alpha_vantage": get_alpha_vantage_indicator,
         "yfinance": get_stock_stats_indicators_window,
     },
     # fundamental_data
     "get_fundamentals": {
+        "fmp": get_fmp_fundamentals,
         "alpha_vantage": get_alpha_vantage_fundamentals,
         "yfinance": get_yfinance_fundamentals,
     },
     "get_balance_sheet": {
+        "fmp": get_fmp_balance_sheet,
         "alpha_vantage": get_alpha_vantage_balance_sheet,
         "yfinance": get_yfinance_balance_sheet,
     },
     "get_cashflow": {
+        "fmp": get_fmp_cashflow,
         "alpha_vantage": get_alpha_vantage_cashflow,
         "yfinance": get_yfinance_cashflow,
     },
     "get_income_statement": {
+        "fmp": get_fmp_income_statement,
         "alpha_vantage": get_alpha_vantage_income_statement,
         "yfinance": get_yfinance_income_statement,
     },
     # news_data
     "get_news": {
+        "fmp": get_fmp_news,
         "alpha_vantage": get_alpha_vantage_news,
         "yfinance": get_news_yfinance,
     },
     "get_global_news": {
+        "fmp": get_fmp_global_news,
         "yfinance": get_global_news_yfinance,
         "alpha_vantage": get_alpha_vantage_global_news,
     },
     "get_insider_transactions": {
+        "fmp": get_fmp_insider_transactions,
         "alpha_vantage": get_alpha_vantage_insider_transactions,
         "yfinance": get_yfinance_insider_transactions,
     },

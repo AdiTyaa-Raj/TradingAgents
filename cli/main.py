@@ -1343,5 +1343,28 @@ def analyze(
         raise typer.Exit(code=1) from None
 
 
+@app.command()
+def reports(
+    reports_dir: Path = typer.Option(
+        Path("reports"),
+        "--reports-dir",
+        help="Directory holding the saved run folders.",
+    ),
+    port: int = typer.Option(8765, "--port", help="Port to bind (next free one if taken)."),
+    host: str = typer.Option("127.0.0.1", "--host", help="Interface to bind."),
+    no_browser: bool = typer.Option(False, "--no-browser", help="Print the URL, don't open a browser."),
+):
+    """Browse the saved reports in a local web viewer instead of the terminal."""
+    from cli.report_server import serve
+
+    if not reports_dir.expanduser().is_dir():
+        console.print(
+            f"[red]No reports directory at {reports_dir.expanduser().resolve()}.[/red] "
+            "Run an analysis first, or pass --reports-dir."
+        )
+        raise typer.Exit(code=1)
+    serve(reports_dir, host=host, port=port, open_browser=not no_browser)
+
+
 if __name__ == "__main__":
     app()

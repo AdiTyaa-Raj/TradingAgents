@@ -6,6 +6,50 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Breaking changes within the 0.x line are called out explicitly.
 
+## [Unreleased]
+
+### Changed
+
+- **Financial Modeling Prep is the default market-data vendor.** Every category
+  that previously defaulted to Yahoo Finance — `core_stock_apis`,
+  `technical_indicators`, `fundamental_data`, `news_data` — now defaults to
+  `fmp` and needs `FMP_API_KEY`. One `/stable` API covers every asset class the
+  pipeline handles (equities, indices, forex, crypto, commodities), replacing
+  Yahoo's per-class symbol handling. yfinance remains fully supported and
+  keyless: set a category to `"yfinance"`, or `"fmp,yfinance"` for ordered
+  fallback.
+- **Yahoo is no longer reached outside the vendor router.** The three paths that
+  called `yfinance` directly — the verified-snapshot price frame, deterministic
+  instrument identity, and the reflection layer's realized-return lookup — now
+  go through the configured vendor. The snapshot in particular is priced from
+  the same vendor as the indicators it is compared against, which is what makes
+  it usable as ground truth (#830).
+- **Statement data is point-in-time by filing date.** yfinance and Alpha Vantage
+  expose only the fiscal period end, so they can only filter on that — which
+  leaks: a quarter ending 2026-06-27 was not public until its 2026-07-31 filing.
+  FMP returns `filingDate`, so on this vendor a period is withheld until the
+  date it was actually filed, and each period's filing date is shown in the
+  report header.
+- **Global news honors a real historical window.** The Yahoo path could only
+  search current headlines and filter them down, so a backtest usually got
+  nothing; FMP's general feed takes a `from`/`to` range and returns the news of
+  that window. Note that `global_news_queries` does not apply to FMP, which
+  serves one editorial macro feed rather than free-text search.
+
+### Added
+
+- **`fmp` vendor** (`dataflows/fmp*.py`): OHLCV, technical indicators,
+  fundamentals overview, the three financial statements, ticker and global news,
+  and insider transactions, with FMP-specific symbol normalization
+  (`XAUUSD`/`GC=F` → `GCUSD`, `BTC-USD` → `BTCUSD`, `EURUSD=X` → `EURUSD`) that
+  accepts broker *and* Yahoo notation so tickers survive a vendor switch.
+- **Vendor-parameterized OHLCV loading.** `stockstats_utils.OHLCV_SOURCES` is
+  the registry of bar sources; `load_ohlcv(symbol, curr_date, vendor)` caches
+  per vendor (the cache filename is namespaced, so two vendors' differently
+  adjusted frames can never be served for one another), and the indicator
+  window logic moved to `dataflows/indicators_common.py` so both vendors share
+  one implementation instead of duplicating the indicator table.
+
 ## [0.4.0] — 2026-08-31
 
 Look-ahead and point-in-time fixes across the data and memory layers, clearer

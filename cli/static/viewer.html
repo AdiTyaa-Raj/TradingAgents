@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="ink">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Report Room · TradingAgents</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%230c0d10'/%3E%3Crect x='7' y='13' width='5' height='14' fill='%23f2a640'/%3E%3Crect x='9' y='7' width='1.4' height='6' fill='%23f2a640'/%3E%3Crect x='19' y='6' width='5' height='12' fill='%235ecf95'/%3E%3Crect x='21' y='18' width='1.4' height='8' fill='%235ecf95'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,300..700;1,6..72,300..600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/viewer.css">
+</head>
+<body>
+<div class="grain" aria-hidden="true"></div>
+
+<header class="masthead">
+  <a class="mark" href="#/">
+    <span class="mark-rule" aria-hidden="true"></span>
+    <span class="mark-name">Report Room</span>
+    <span class="mark-kicker">TradingAgents · analysis archive</span>
+  </a>
+  <div class="masthead-tools">
+    <span class="root-path" id="root-path" title="Reports root"></span>
+    <button class="btn" id="btn-refresh" title="Re-read the reports directory">Refresh</button>
+    <button class="btn" id="btn-theme" title="Toggle ink / paper (t)"><span id="theme-label">Paper</span></button>
+  </div>
+</header>
+
+<!-- ── Tape: every run, concise ─────────────────────────────────────────── -->
+<main class="view" id="view-tape">
+  <section class="digest-strip" id="digest-strip"></section>
+
+  <section class="controls">
+    <label class="field">
+      <span class="field-key">Filter</span>
+      <input id="filter" type="search" placeholder="ticker, rating, or words in the summary   /" autocomplete="off">
+    </label>
+    <div class="chips" id="call-chips" role="group" aria-label="Filter by call"></div>
+    <label class="field field-sm">
+      <span class="field-key">Sort</span>
+      <select id="sort">
+        <option value="newest">Newest first</option>
+        <option value="oldest">Oldest first</option>
+        <option value="ticker">Ticker A–Z</option>
+        <option value="longest">Longest report</option>
+      </select>
+    </label>
+    <div class="controls-right">
+      <button class="btn" id="btn-expand">Expand all</button>
+      <a class="btn btn-accent" href="#/digest">One-page digest</a>
+    </div>
+  </section>
+
+  <section class="tape" id="tape"></section>
+  <p class="tape-empty" id="tape-empty" hidden></p>
+</main>
+
+<!-- ── Digest: all runs on one printable sheet ──────────────────────────── -->
+<main class="view" id="view-digest" hidden>
+  <div class="sheet-bar">
+    <a class="btn" href="#/">← Tape</a>
+    <h2 class="sheet-title">Decision digest</h2>
+    <button class="btn" data-print>Print / PDF</button>
+  </div>
+  <div class="sheet" id="sheet"></div>
+</main>
+
+<!-- ── Reader: one run, in full ─────────────────────────────────────────── -->
+<main class="view" id="view-reader" hidden>
+  <header class="reader-bar">
+    <a class="btn btn-back" href="#/" title="Back to the tape (Esc)">← Tape</a>
+    <div class="reader-id">
+      <h2 id="reader-ticker">—</h2>
+      <span class="stamp" id="reader-stamp"></span>
+    </div>
+    <div class="reader-call" id="reader-call"></div>
+    <dl class="levels levels-bar" id="reader-levels"></dl>
+    <div class="reader-tools">
+      <label class="find-wrap">
+        <input id="find" type="search" placeholder="Find in report   /" autocomplete="off">
+        <span class="find-count" id="find-count"></span>
+      </label>
+      <button class="btn" id="btn-copy" title="Copy the whole report as markdown">Copy</button>
+      <a class="btn" id="btn-download" download>Download</a>
+      <button class="btn" data-print>Print</button>
+    </div>
+  </header>
+  <div class="progress" aria-hidden="true"><i id="progress-bar"></i></div>
+
+  <div class="reader-body">
+    <nav class="rail" id="rail" aria-label="Report sections"></nav>
+    <article class="prose" id="prose"></article>
+    <aside class="outline" id="outline" aria-label="Section outline"></aside>
+  </div>
+</main>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script src="/static/viewer.js"></script>
+</body>
+</html>

@@ -89,6 +89,73 @@ def _clean_identity_value(value: Any) -> str | None:
     return cleaned
 
 
+def _identity_from_fields(raw: Mapping[str, Any], mapping: tuple[tuple[str, str], ...]) -> dict:
+    """Project a vendor payload onto the identity keys, dropping empty values."""
+    identity: dict[str, str] = {}
+    for source_key, target_key in mapping:
+        value = _clean_identity_value(raw.get(source_key))
+        if value and target_key not in identity:
+            identity[target_key] = value
+    return identity
+
+
+def _identity_from_fmp(ticker: str) -> dict:
+    """Identity metadata from FMP's company profile, or its quote for non-equities.
+
+    ``profile`` carries sector/industry but covers listed companies and funds
+    only; a commodity, forex pair, index or crypto asset has none, so the quote
+    supplies the display name and market instead. Without this fallback those
+    instruments would lose their identity anchor entirely (#814).
+    """
+    from tradingagents.dataflows.fmp_stock import get_profile, get_quote
+
+    identity = _identity_from_fields(
+        get_profile(ticker) or {},
+        (
+            ("companyName", "company_name"),
+            ("sector", "sector"),
+            ("industry", "industry"),
+            ("exchange", "exchange"),
+        ),
+    )
+    if identity:
+        return identity
+
+    return _identity_from_fields(
+        get_quote(ticker) or {},
+        (
+            ("name", "company_name"),
+            ("exchange", "exchange"),
+        ),
+    )
+
+
+def _identity_from_yfinance(ticker: str) -> dict:
+    """Identity metadata from Yahoo's ``Ticker.info`` snapshot."""
+    from tradingagents.dataflows.symbol_utils import normalize_symbol
+
+    info = yf.Ticker(normalize_symbol(ticker)).info or {}
+    return _identity_from_fields(
+        info,
+        (
+            ("longName", "company_name"),
+            ("shortName", "company_name"),  # fallback when longName is absent
+            ("sector", "sector"),
+            ("industry", "industry"),
+            ("exchange", "exchange"),
+            ("quoteType", "quote_type"),
+        ),
+    )
+
+
+# Vendors that can resolve instrument identity. Vendors absent here (e.g.
+# alpha_vantage) are skipped when they appear in the configured chain.
+_IDENTITY_RESOLVERS = {
+    "fmp": _identity_from_fmp,
+    "yfinance": _identity_from_yfinance,
+}
+
+
 @functools.lru_cache(maxsize=256)
 def resolve_instrument_identity(ticker: str) -> dict:
     """Resolve deterministic identity metadata (company name, sector, …) for a ticker.
@@ -99,38 +166,42 @@ def resolve_instrument_identity(ticker: str) -> dict:
     the price action to a narrative and invent an identity that then cascaded
     through every downstream agent.
 
-    Best-effort by design: if yfinance is unavailable, rate-limited, or doesn't
-    recognise the ticker, we return ``{}`` and the caller falls back to
-    ticker-only context rather than failing before analysis starts. Cached so
-    the lookup happens at most once per ticker per process.
+    The vendor chain configured for ``fundamental_data`` is tried in order, so
+    identity comes from the same provider as the rest of the company data. Each
+    resolver normalizes the symbol to its own vendor's convention (``XAUUSD`` ->
+    ``GC=F`` for Yahoo, ``GCUSD`` for FMP) so identity resolves for the same
+    instrument the price path actually fetches (#983).
 
-    The symbol is normalized first (e.g. ``XAUUSD`` -> ``GC=F``) so identity
-    resolves for the same instrument the price path actually fetches (#983).
+    Best-effort by design: if a vendor is unavailable, rate-limited, or doesn't
+    recognise the ticker, the next one is tried and an exhausted chain returns
+    ``{}`` — the caller falls back to ticker-only context rather than failing
+    before analysis starts. Cached so the lookup happens at most once per ticker
+    per process.
     """
-    from tradingagents.dataflows.symbol_utils import normalize_symbol
+    from tradingagents.dataflows.interface import get_vendor
 
-    try:
-        info = yf.Ticker(normalize_symbol(ticker)).info or {}
-    except Exception as exc:  # noqa: BLE001 — fail open, never block the run
-        logger.debug("Could not resolve instrument identity for %s: %s", ticker, exc)
-        return {}
+    configured = get_vendor("fundamental_data", "get_fundamentals") or ""
+    chain = [v.strip() for v in configured.split(",") if v.strip()]
+    # "default" (or an unset value) means "any vendor that can do this".
+    if not chain or chain == ["default"]:
+        chain = list(_IDENTITY_RESOLVERS)
 
-    identity: dict[str, str] = {}
-    company_name = _clean_identity_value(info.get("longName")) or _clean_identity_value(
-        info.get("shortName")
-    )
-    if company_name:
-        identity["company_name"] = company_name
-    for source_key, target_key in (
-        ("sector", "sector"),
-        ("industry", "industry"),
-        ("exchange", "exchange"),
-        ("quoteType", "quote_type"),
-    ):
-        value = _clean_identity_value(info.get(source_key))
-        if value:
-            identity[target_key] = value
-    return identity
+    for vendor in chain:
+        resolver = _IDENTITY_RESOLVERS.get(vendor)
+        if resolver is None:
+            continue
+        try:
+            identity = resolver(ticker)
+        except Exception as exc:  # noqa: BLE001 — fail open, never block the run
+            logger.debug(
+                "Could not resolve instrument identity for %s via %s: %s",
+                ticker, vendor, exc,
+            )
+            continue
+        if identity:
+            return identity
+
+    return {}
 
 
 def build_instrument_context(

@@ -9,6 +9,8 @@ from stockstats import wrap
 from yfinance.exceptions import YFRateLimitError
 
 from .config import get_config
+from .fmp_stock import fetch_ohlcv_frame as _fetch_fmp_ohlcv
+from .fmp_symbols import normalize_fmp_symbol
 from .symbol_utils import NoMarketDataError, normalize_symbol
 from .utils import safe_ticker_component
 
@@ -181,17 +183,129 @@ def _needs_same_day_refresh(data_file, curr_date_dt, today_date) -> bool:
     return time.time() - os.path.getmtime(data_file) > OHLCV_CACHE_TTL_SECONDS
 
 
-def load_ohlcv(symbol: str, curr_date: str) -> pd.DataFrame:
+def _download_yfinance_ohlcv(canonical: str, start_str: str, end_str: str) -> pd.DataFrame:
+    """Raw 5-year OHLCV frame from Yahoo, date exposed as a ``Date`` column."""
+    downloaded = yf_retry(lambda: yf.download(
+        canonical,
+        start=start_str,
+        end=end_str,
+        multi_level_index=False,
+        progress=False,
+        auto_adjust=True,
+    ))
+    return _ensure_date_column(downloaded.reset_index())
+
+
+def _download_fmp_ohlcv(canonical: str, start_str: str, end_str: str) -> pd.DataFrame:
+    """Raw 5-year OHLCV frame from Financial Modeling Prep.
+
+    ``end_str`` follows the caller's exclusive-end convention (tomorrow); FMP's
+    ``to`` is inclusive, but asking for one day past today matches no extra bar,
+    so both vendors take the same window unchanged.
+    """
+    return _fetch_fmp_ohlcv(canonical, start_str, end_str, canonical=canonical)
+
+
+# OHLCV sources, keyed by vendor name. ``tag`` namespaces the cache file so two
+# vendors' frames — differently adjusted, and keyed by different symbol
+# spellings — can never be served for one another.
+OHLCV_SOURCES = {
+    "yfinance": {
+        "download": _download_yfinance_ohlcv,
+        "normalize": normalize_symbol,
+        "tag": "YFin",
+        "label": "Yahoo Finance",
+    },
+    "fmp": {
+        "download": _download_fmp_ohlcv,
+        "normalize": normalize_fmp_symbol,
+        "tag": "FMP",
+        "label": "Financial Modeling Prep",
+    },
+}
+
+DEFAULT_OHLCV_VENDOR = "yfinance"
+
+
+def resolve_ohlcv_vendor(configured: str | None) -> str:
+    """Pick a single OHLCV source from a configured vendor string.
+
+    ``configured`` may be a chain ("fmp,yfinance") or the "default" sentinel,
+    matching ``data_vendors`` syntax; the first entry that actually has an OHLCV
+    source wins. Falls back to ``DEFAULT_OHLCV_VENDOR`` for "default", an empty
+    value, or a chain naming only vendors without one (e.g. alpha_vantage,
+    which serves indicators from its own API rather than from local bars).
+    """
+    for name in (configured or "").split(","):
+        candidate = name.strip()
+        if candidate in OHLCV_SOURCES:
+            return candidate
+    return DEFAULT_OHLCV_VENDOR
+
+
+def fetch_ohlcv_window(
+    symbol: str,
+    start_date: str,
+    end_date: str,
+    vendor: str = DEFAULT_OHLCV_VENDOR,
+) -> pd.DataFrame:
+    """Uncached OHLCV bars for an explicit window, ascending, with a ``Date`` column.
+
+    Unlike :func:`load_ohlcv` this neither caches nor clamps to a look-ahead
+    cutoff, because its one caller is the reflection layer's realized-return
+    lookup: settling the outcome of a past decision means deliberately reading
+    the bars that came *after* that trade date.
+
+    ``end_date`` follows the exclusive-end convention (yfinance's); FMP treats
+    it as inclusive, so FMP may return one extra trailing bar. Callers index
+    forward from the first bar, so the extra row is harmless.
+    """
+    source = OHLCV_SOURCES.get(vendor)
+    if source is None:
+        raise ValueError(
+            f"Unknown OHLCV vendor {vendor!r}. Available: {sorted(OHLCV_SOURCES)}."
+        )
+
+    canonical = source["normalize"](symbol)
+    data = source["download"](canonical, start_date, end_date)
+    data = _ensure_date_column(data)
+
+    if data.empty or "Close" not in data.columns:
+        raise NoMarketDataError(
+            symbol, canonical, f"{source['label']} returned no rows"
+        )
+
+    data = _clean_dataframe(data)
+    return _fill_price_gaps(data).sort_values("Date").reset_index(drop=True)
+
+
+def load_ohlcv(
+    symbol: str,
+    curr_date: str,
+    vendor: str = DEFAULT_OHLCV_VENDOR,
+) -> pd.DataFrame:
     """Fetch OHLCV data with caching, filtered to prevent look-ahead bias.
 
     Downloads 5 years of data up to today and caches per symbol. On
     subsequent calls the cache is reused. Rows after curr_date are
     filtered out so backtests never see future prices.
+
+    ``vendor`` selects the price source (see ``OHLCV_SOURCES``). Callers pass it
+    explicitly rather than having it read from config here: by the time a
+    vendor's indicator implementation runs the router has already chosen that
+    vendor, so re-reading config would send a fallback implementation straight
+    back to the vendor that just failed.
     """
-    # Resolve broker/forex symbols (XAUUSD+ -> GC=F) to Yahoo's convention,
-    # then reject values that would escape the cache directory when
-    # interpolated into the cache filename (e.g. ``../../tmp/x``).
-    canonical = normalize_symbol(symbol)
+    source = OHLCV_SOURCES.get(vendor)
+    if source is None:
+        raise ValueError(
+            f"Unknown OHLCV vendor {vendor!r}. Available: {sorted(OHLCV_SOURCES)}."
+        )
+
+    # Resolve broker/forex symbols to the vendor's convention (XAUUSD+ -> GC=F
+    # for Yahoo, -> GCUSD for FMP), then reject values that would escape the
+    # cache directory when interpolated into the cache filename (``../../tmp/x``).
+    canonical = source["normalize"](symbol)
     safe_symbol = safe_ticker_component(canonical)
 
     config = get_config()
@@ -209,7 +323,7 @@ def load_ohlcv(symbol: str, curr_date: str) -> pd.DataFrame:
     os.makedirs(config["data_cache_dir"], exist_ok=True)
     data_file = os.path.join(
         config["data_cache_dir"],
-        f"{safe_symbol}-YFin-data-{start_str}-{end_str}.csv",
+        f"{safe_symbol}-{source['tag']}-data-{start_str}-{end_str}.csv",
     )
 
     # A cached file may be empty if a prior fetch failed (unknown symbol,
@@ -228,19 +342,11 @@ def load_ohlcv(symbol: str, curr_date: str) -> pd.DataFrame:
             data = cached
 
     if data is None:
-        downloaded = yf_retry(lambda: yf.download(
-            canonical,
-            start=start_str,
-            end=end_str,
-            multi_level_index=False,
-            progress=False,
-            auto_adjust=True,
-        ))
-        downloaded = _ensure_date_column(downloaded.reset_index())
+        downloaded = source["download"](canonical, start_str, end_str)
         # Only cache real data — never persist an empty frame.
         if downloaded.empty or "Close" not in downloaded.columns:
             raise NoMarketDataError(
-                symbol, canonical, "Yahoo Finance returned no rows"
+                symbol, canonical, f"{source['label']} returned no rows"
             )
         downloaded.to_csv(data_file, index=False, encoding="utf-8")
         data = downloaded
@@ -299,8 +405,11 @@ class StockstatsUtils:
         curr_date: Annotated[
             str, "curr date for retrieving stock price data, YYYY-mm-dd"
         ],
+        vendor: Annotated[str, "OHLCV source to price the indicator from"] = (
+            DEFAULT_OHLCV_VENDOR
+        ),
     ):
-        data = load_ohlcv(symbol, curr_date)
+        data = load_ohlcv(symbol, curr_date, vendor)
         df = wrap(data)
         df["Date"] = df["Date"].dt.strftime("%Y-%m-%d")
         curr_date_str = pd.to_datetime(curr_date).strftime("%Y-%m-%d")
